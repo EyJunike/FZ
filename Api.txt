@@ -1,0 +1,1004 @@
+GameSensical API (GSAPI) Reference
+ Overview: The GameSensical API (GSAPI) is an in-game Lua scripting interface for CS:GO (part of the
+ GameSense cheat). It provides callbacks and functions to inspect and control game state, draw on
+screen elements, and create UI elements. GSAPI is not a web service: there are no HTTP endpoints or
+ authentication requirements – all calls are made directly in-game via Lua scripts.
+ Event Callbacks
+ GSAPI provides many event callbacks (registered via client.set_event_callback) that fire on
+ specific game events. Each callback name and its provided data fields are as follows:
+ paint – Fired every frame when the game renders a frame (while connected). Used for custom
+ drawing on-screen . No parameters; typical usage via renderer functions (see Renderer
+ section).
+ paint_ui – Like paint, but also fires when the in-game menu is open . No parameters;
+ used to draw UI overlays even in menu.
+ run_command – Fired each tick (typically 64×/sec) when a new command is run while alive .
+ Provides keys: 
+chokedcommands (number of unsent commands), 
+command_number (current command index) .
+ Use this to process data updated each tick (e.g. other-player info).
+ setup_command – Fired before each movement command is sent (before cheat features run)
+ . Provides many keys for manipulating movement and input: 
+chokedcommands, command_number, pitch, yaw, forwardmove, sidemove, 
+move_yaw, allow_send_packet (bool to force choke), plus many in_* booleans for each
+ user input button (e.g. in_attack, in_jump, etc) . For example, setting 
+e.in_use = 1 disables anti-aim as if the player pressed "use". 
+override_view – Allows overriding the camera (viewmodel) position and angles . Provides
+ keys: x, y, z (camera position), pitch, yaw (view angles), and fov (field of view) . By
+ setting these, one can change the camera each frame. 
+console_input – Fires when the user enters a console command . The callback receives
+ one argument: the input text string. Returning true cancels normal processing (blocking the
+ command) . 
+output – Fires whenever text would be printed to the in-game console/output (e.g. via 
+print, client.log, or built-in messages) . Only one callback may be active. Provides
+ keys: text (the string drawn), and r, g, b, a (color) . You can return a modified string
+ to override output (e.g. filter chat), but be sure to client.unset_event_callback when
+ done to avoid breaking default output . 
+indicator – Fires when an on-screen indicator is drawn (e.g. “DT” text for double-tap) .
+ Only one callback may be active. Provides keys: text (indicator string) and r,g,b,a (color)
+ . You can modify or suppress indicators. 
+player_chat – Fired when any player sends a chat message . Provides keys: teamonly
+ (bool), entity (player’s entity index), name (player name), and text (message) . 
+• 
+1
+ • 2
+ • 3
+ • 
+• 4
+ • 
+5
+ • 
+6 7
+ • 8
+ 9
+ • 10
+ 11
+ • 
+12
+ 13
+ 12
+ • 14
+ 15
+ • 16
+ 17
+ 1
+string_cmd – Fired before a string command is sent to the server (chat messages, inspect
+ commands, buy commands, etc) . The callback receives one argument: the full command
+ string. Returning true can block it. 
+net_update_start – Fired before the game processes network updates from the server
+ (FrameStageNotify “FRAME_NET_UPDATE_START”) . Use with caution; partial entity data may
+ require manual restoration. 
+net_update_end – Fired after an entity update packet is fully received (FrameStageNotify
+ “FRAME_NET_UPDATE_END”) . Use to run logic after all updates. 
+predict_command – Fired during game prediction (client-side simulation) . Provides 
+command_number key . This runs very frequently; avoid heavy work here. 
+pre_render – Fired right before the game renders a frame . No parameters. Useful for last
+minute logic each frame. 
+post_render – Fired right after a frame is rendered . No parameters. 
+aim_fire – Fired when the rage aimbot fires a shot at a target . Provides many keys: id
+ (shot ID to correlate events), target (enemy entity index), hit_chance, hitgroup, 
+damage, backtrack ticks, booleans boosted, high_priority, interpolated, 
+extrapolated, teleported, tick (game tick of shot), and x,y,z (world coords of aim
+ point) . Use this to visualize or log each shot attempt. 
+aim_hit – Fired when a rage-aimbot shot hits the target . Provides: id (same as 
+aim_fire), target, hit_chance, hitgroup, and damage . (Example: log final
+ damage dealt) . 
+aim_miss – Fired when a rage shot misses the target . Provides: id, target, 
+hit_chance, hitgroup, and reason (string: e.g. "spread", "prediction error", 
+"death", or "?") . 
+pre_config_load / post_config_load / pre_config_save / post_config_save 
+Fired before/after loading or saving a script config. No parameters . Use these to run
+ code on config change.
+ Client Functions
+ The client table exposes miscellaneous utilities. Key functions include (all client.):
+ client.set_event_callback(event_name, callback) – Registers a Lua function to run
+ on the given event (see above). event_name is a string, callback is a Lua function. Returns
+ nothing. Throws on invalid event . 
+client.unset_event_callback(event_name, callback) – Removes a previously-set
+ event callback . 
+client.system_time() – Returns the local system time as number of seconds (float) since the
+ cheat started . 
+client.timestamp() – Returns the system timestamp (seconds since Unix epoch) as number
+ . 
+client.unix_time() – Alias for timestamp() (seconds since Unix epoch) . 
+client.visible(x, y, z) – Returns boolean whether the 3D point (world coords) is visible
+ from the local player's perspective (line-of-sight) . 
+client.trace_line(skip_ent, from_x, from_y, from_z, to_x, to_y, to_z) 
+Traces a ray in the world ignoring the entity with index skip_ent. Returns (fraction, 
+hit_entindex): fraction of ray to hit, and entity hit (or -1) . 
+client.trace_bullet(from_player, entity_index, from_x, from_y, from_z, 
+to_x, to_y, to_z) – Traces a bullet from from_player (bool) from point (x,y,z) to (x,y,z).
+ Returns (entindex, damage) : hit entity and damage dealt. 
+• 
+18
+ • 
+19
+ • 
+20
+ • 21
+ 22
+ • 23
+ • 24
+ • 25
+ 26 27
+ • 28
+ 29
+ 30
+ • 31
+ 32
+ • 
+33 34
+ • 
+35
+ • 
+36
+ • 
+37
+ • 
+38
+ • 39
+ • 
+40
+ • 
+41
+ • 
+42
+ 2
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+43
+ 45
+ 44
+ client.update_player_list() – Forces the player list tab to refresh (as if opening player
+ list) . 
+client.userid_to_entindex(userid) – Converts a CS:GO player userID (from events) to an
+ entity index. Returns 0 on failure . 
+client.exec(cmd) – Executes a console command (string). Returns nothing. Throws on error
+ . 
+client.create_interface(module_name, version) – Advanced: Loads a game interface.
+ Returns void*. Used mainly internally . 
+client.find_signature(pattern) – Searches game memory for the given byte signature
+ (as a string). Returns the memory address (integer) or nil . 
+client.delay_call(function, seconds, ...) – Calls a Lua function after a given delay
+ 46
+ 48
+ (in seconds) . The 
+47
+ ... are arguments to pass. 
+client.draw_debug_text(x, y, color, text) – Draws text at screen (x,y) in ARGB color 
+{a,r,g,b} . Only works when cheat menu is open . 
+client.draw_hitboxes(id, r, g, b, a) – Draws a hitbox overlay for the entity with
+ 49
+ entindex 
+id in color (r,g,b,a)
+ 50
+ (used with 
+aim_fire.tick to visualize shot). 
+client.log(...) – Prints to console with default color (equivalent to 
+print ) . 
+client.color_log(r, g, b, message...) – Prints colored text to console . Usage: 
+client.color_log(255,0,0, "Hello") . 
+client.error_log(...) – Same as 
+51
+ 52
+ 53
+ client.log but ensures a newline . 
+client.scale_damage(level) – Sets the damage scaling level (game internal). Values:
+ 0=high, 1=low, 2=off. Returns nothing . 
+client.latency() – Returns current network latency to server in seconds . 
+54
+ client.random_int(min, max) , 
+56
+ 57
+ 55
+ client.random_float(min, max) – Returns a random
+ integer or float in the given range . 
+client.key_state(vk_code) – Returns 
+true if the given virtual key code is currently down
+ 58
+ 59
+ . 
+client.reload_active_scripts() – Reloads all Lua scripts without restarting the cheat
+ . 
+client.register_esp_flag(name, icon) – Registers a new ESP toggle under the
+ “VISUALS” menu with the given name and icon (PNG data). Returns a callback item that can be
+ toggled from scripts. 
+client.get_model_name(model_index) – Returns the model name string for a given model
+ index (e.g. entity’s model) . 
+60
+ client.camera_angles() , 
+client.camera_position() – Returns the current camera
+ (viewmodel) angles and position as 
+{pitch,yaw,roll} and 
+{x,y,z} respectively . 
+client.screen_size() – Returns the screen resolution 
+61
+ 62
+ {width, height} . 
+client.set_clan_tag(name[, tag]) – Sets the player’s clan tag (toggles GTA-style clan tag
+ animation). 
+name and optional 
+tag strings (last writes to console chat). 
+Each of the above is documented with signatures and descriptions in the GSAPI reference .
+ Bitwise Functions (
+ bit )
+ These are standard Lua bit operations:
+ • 
+bit.band(x, y) , 
+bit.bor(x, y) , 
+bit.bxor(x, y) , 
+45
+ 40
+ bit.bnot(x) – Bitwise AND, OR,
+ XOR, NOT of 32-bit integers . 
+63
+ • 
+64
+ bit.lshift(x, n) , 
+bit.rshift(x, n) , 
+bit.arshift(x, n) – Logical left shift, logical
+ right shift, and arithmetic (sign-preserving) right shift of 
+x by n bits . 
+65
+ 3
+• 
+• 
+• 
+• 
+bit.rol(x, n) , 
+bit.ror(x, n) – Bitwise rotate-left and rotate-right of 
+x by n bits . 
+67
+ bit.bswap(x) – Byte-swap a 32-bit integer (reverse endianness) . 
+bit.tobit(x) – Converts a number to a 32-bit integer (Lua may extend to float) . 
+bit.tohex(x) – Converts integer 
+x to an 8-character hex string.
+ All bit functions behave like standard Lua CJSON bit library (as documented) .
+ 63
+ Configuration (
+ config )
+ The 
+config table handles script configs (saving/loading settings):
+ • 
+• 
+66
+ 68
+ config.export(tab, name, ...) – Exports the current values of the given tab (or checkbox
+ name) to a string. Returns the config text. 
+config.load(name, tab, container) – Loads a script config file. 
+f
+ ilename; optional 
+tab and 
+name is the config
+ container specify where to load values (as when using 
+ui.new_* ). Throws on failure.
+ These allow saving and loading script settings. No return value is given for 
+load .
+ ConVars (
+ cvar )
+ GSAPI exposes all game ConVars (console variables) via the global 
+cvar.cl_updaterate ) is an object with methods:
+ • 
+• 
+• 
+• 
+cvar table. Each ConVar name (e.g.
+ 69
+ 70
+ cvar_object:get_int() – Returns the ConVar’s value as integer . 
+cvar_object:get_float() – Returns as float . 
+cvar_object:get_string() – Returns the raw string value . 
+cvar_object:invoke_callback(...args) – Manually invokes the ConVar’s change
+ callback, passing any args (for commands)
+ 71
+ 72
+ • 
+• 
+• 
+• 
+• 
+73
+ 75
+ 76
+ . Useful to trigger console commands. 
+cvar_object:set_int(value) – Sets the ConVar’s integer value (updates float/string too)
+ . 
+cvar_object:set_float(value) – Sets the ConVar’s float value (updates int/string) . 
+cvar_object:set_string(value) – Sets the ConVar’s string (updates float/int, calls
+ callback) . 
+cvar_object:set_raw_int(value) – Sets the integer part only (float/string unchanged)
+ . 
+cvar_object:set_raw_float(value) – Sets the float part only (int/string unchanged) . 
+For example, to toggle a boolean ConVar named 
+developer , one could do: 
+local dev = cvar.developer
+ dev:set_int(1- dev:get_int())-- toggle between 0 and 1
+ 74
+ 77
+ and/or invoke 
+dev:invoke_callback() to apply it .
+ 78
+ 4
+Database
+ A simple key-value store:
+ • 
+• 
+database.read(key) – Reads the value associated with 
+the value (or 
+nil if not set) . 
+database.write(key, value) – Writes 
+nothing. 
+key in the local database. Returns
+ 79
+ value under 
+key in the database
+ This persists between sessions on the local machine (useful for storing stats or settings).
+ Entity Utilities
+ Functions in 
+entity operate on game entities:
+ • 
+80
+ . Returns
+ entity.get_all() – Returns a table of all entity indices currently in the game world . 
+81
+ • 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+entity.get_bounding_box(id) – Given entity index 
+id , returns two screen-space
+ rectangles 
+{x1,y1,x2,y2}, {x3,y3,x4,y4} for the entity’s bounding box . 
+82
+ entity.get_classname(id) – Returns the entity’s class name string (e.g. 
+"CCSPlayer" )
+ 83
+ . 
+entity.get_esp_data(id) – Returns many values for ESP: 
+(is_enemy, has_defuser, 
+is_flashed, health, armor, scoped, fakewalking, flags) for the entity (1/0
+ booleans for enemy, defuser, flashed, crouch/fly in 
+flags ) . 
+84
+ entity.get_game_rules() – Returns the index of the 
+CCSGameRulesProxy entity (game
+ rules object)
+ 85
+ 86
+ , or nil if not in-game. 
+entity.get_local_player() – Returns the index of the local player’s entity, or nil if not
+ connected . 
+entity.get_origin(id) – Returns the world 
+index 
+87
+ 88
+ {x,y,z} position (vector) of the entity with
+ id . 
+entity.get_player_name(id) – Returns the player name string for the given player entity
+ index . 
+entity.get_player_resource() – Returns the index of the player resource entity
+ 89
+ (CCSPlayerResource) , or nil if not available. 
+entity.get_player_weapon(id) – Returns the entity index of the weapon currently held by
+ player 
+90
+ 91
+ id , or nil. 
+entity.get_players() – Returns a table of all player entity indices currently alive (in-game)
+ . 
+entity.is_alive(id) – Returns true if entity 
+id is a live player . 
+entity.is_dormant(id) – Returns true if entity 
+92
+ id is dormant (not active) . 
+entity.is_enemy(id) – Returns true if entity 
+93
+ id is an enemy of the local player . 
+entity.get_prop(id, prop_name) – Reads the raw netprop 
+94
+ prop_name (string, e.g. 
+"m_iHealth" or 
+"m_vecOrigin" ) from entity 
+95
+ . 
+id . Returns the raw value (number/string)
+ entity.set_prop(id, prop_name, value) – Writes the raw netprop 
+prop_name on
+ entity 
+id to 
+value (e.g. force-set health or origin). Returns nothing
+ mostly for demos/plugins.) 
+96
+ . (Use with care;
+ entity.get_steam64(id) – Returns the Steam64 ID (as number) for the player entity 
+or 0 if not valid . 
+97
+ id ,
+ 5
+• 
+All 
+entity.hitbox_position(id, hitbox, matrix) – Returns the world 
+{x,y,z}
+ coordinates of a specific hitbox on entity 
+98
+ id . 
+hitbox is index (0=head, etc), 
+(optional) for third-person. 
+matrix
+ these functions are documented in the API reference . For example,
+ 81
+ 95
+ entity.get_players() returns all alive players, and 
+entity.get_prop(id, "m_iHealth")
+ returns their health.
+ Global Game State (
+ globals )
+ These functions query the current game/global state:
+ • 
+• 
+globals.absoluteframetime() – Seconds elapsed during the last frame
+ frametime . 
+globals.curtime() – Current game time in seconds (server-synced)
+ 100
+ 99
+ . Same as 
+. This increases each
+ • 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+101
+ tick. 
+globals.frametime() – Seconds elapsed during the last frame (same as 
+absoluteframetime() ) . 
+globals.framecount() – Number of frames since game started . 
+globals.tickcount() – Number of game ticks since start
+ 104
+ 102
+ 103
+ . In CS:GO, ticks advance by 
+tickinterval . 
+globals.tickinterval() – Duration of one game tick in seconds (e.g. 0.015625 at 64-tick)
+ . 
+globals.realtime() – Local computer real-time in seconds . 
+globals.mapname() – Name of current map (string), or nil if not in-game . 
+globals.maxplayers() – Maximum players on server . 
+globals.chokedcommands() – How many commands are currently choked by the client
+ (unsent to server) . 
+105
+ 107
+ 108
+ globals.commandack() , 
+111
+ 109
+ 110
+ 106
+ globals.oldcommandack() – The tick numbers of the last two
+ acknowledged commands from server . 
+globals.lastoutgoingcommand() – Command number of the last outgoing command client
+ sent . 
+These provide timing and sync info about the game state. (Examples: 
+globals.curtime() is often
+ used for timing events or animations.)
+ JSON Utilities
+ The 
+json table is a Lua CJSON interface for JSON encoding/decoding:
+ • 
+• 
+json.parse(json_text) – Parses a UTF-8 JSON string and returns the equivalent Lua value
+ (table/number/string/boolean), or 
+113
+ nil on failure . 
+112
+ null in JSON becomes 
+cjson.null . 
+json.stringify(value) – Serializes a Lua value (table, number, string, boolean, or nil) into a
+ JSON string . 
+• 
+• 
+• 
+json.decode_max_depth([n]) , 
+114
+ json.encode_max_depth(n) – Get/set the maximum
+ nesting depth for parsing/encoding (default 1000) . 
+json.decode_invalid_numbers([flag]) , 
+115
+ 116
+ json.encode_invalid_numbers([flag]) 
+Get/set whether to allow non-standard numbers (NaN, Inf) . 
+json.encode_keep_buffer(flag) – If true, reuses CJSON’s buffer across encodes to
+ improve performance . 
+118
+ 117
+ 6
+• 
+• 
+119
+ json.encode_number_precision(n) – Set number of significant digits for encoding floats
+ (1–14, default 14) . 
+json.encode_sparse_array([convert, [ratio, [safe]]]) – Set how sparse Lua tables
+ are encoded to JSON arrays. See Lua CJSON docs (parameters 
+120
+ convert , 
+ratio , 
+safe ). 
+All arguments and return behaviors match the standard Lua CJSON documentation . For
+ example: 
+116
+ local tbl = json.parse('{"x":10}')
+ json.stringify({a=1,b=2})
+ 113
+ will convert between JSON and Lua tables.
+ Material System
+ The 
+materialsystem module allows manipulating game materials/textures:
+ • 
+• 
+121
+ 122
+ • 
+• 
+• 
+materialsystem.arms_material() – Returns the material object for the viewmodel arms (if
+ “viewmodel arms” is enabled) . 
+materialsystem.chams_material() – Returns the material used for player chams (colored
+ models) . 
+materialsystem.find_material(path, force_load) – Finds/loads a material by its file
+ path (string), e.g. 
+"models/weapons/v_pist_deagle/frame" . Returns a material object or
+ 123
+ nil . If 
+force_load =true, loads it even if not in memory. 
+materialsystem.find_materials(partial_path, force_load) – Returns a table of all
+ materials whose path contains 
+124
+ partial_path string . 
+materialsystem.find_texture(path) – Finds a texture by file path (string)
+ • 
+125
+ . Returns a
+ material-like texture object usable in shaders. 
+materialsystem.get_model_materials(entindex) – Returns a table of all material
+ objects used by the model of entity 
+126
+ • 
+entindex . 
+materialsystem.override_material(old_mat, new_mat) – Overrides all render
+ properties of material 
+old_mat with those of 
+127
+ new_mat . Both arguments are material
+ objects.
+ Each material object (returned by 
+find_material or above) has methods:
+ • 
+• 
+• 
+• 
+• 
+• 
+:alpha_modulate(a) – Set the material’s alpha (0–255)
+ 130
+ 128
+ 129
+ . (Some materials ignore this.) 
+:color_modulate(r, g, b) – Set RGB color of the material . 
+:get_material_var_flag(flag_index) – Returns boolean value of a material-flag (given
+ numeric flag index) . 
+:set_material_var_flag(flag_index, value) – Sets a material-flag to true/false . 
+:get_name() – Returns the material’s name/path . 
+:get_shader_param(param_name) – Gets the material’s shader parameter named 
+param_name (any type)
+ 132
+ • 
+133
+ 134
+ • 
+131
+ . Returns the value or nil. 
+:set_shader_param(param_name, value) – Sets the shader parameter of this material
+ . (E.g. assign a texture or number.) 
+:reload() – Restores the original properties of this material (undoing any overrides) . 
+135
+ Example: To change the player material to wireframe red: 
+7
+local mat = materialsystem.find_material("models/player/shared/glow")
+ mat:color_modulate(255,0,0)
+ mat:alpha_modulate(100)
+ Materials and flags are enumerated by the game; consult CS:GO docs for indices. (The GSAPI reference
+ provides the exact function signatures .)
+ 123
+ 129
+ Panorama (Game UI Scripting)
+ The 
+panorama module injects code into the CS:GO Panorama UI:
+ • 
+• 
+panorama.loadstring(js_code, panel) – Executes JavaScript 
+UI context. 
+panel (string) specifies a root UI panel (optional)
+ js_code in the Panorama
+ 136
+ . Use this to interact with
+ menu UI. 
+panorama.open(panel) – Opens (or focuses) the given Panorama panel by name (string), e.g.
+ "PanoramaMain" . This can bring up a UI panel .
+ 137
+ Both functions return nothing. Panorama scripts must be valid CS:GO Panorama API code. (Example
+ usage is in external docs, not provided here.)
+ Player List (
+ plist )
+ Functions to read/write values in the CS:GO player list menu:
+ • 
+plist.get(entindex, field) – Gets a value from the player list for player at 
+field is a string key (e.g. 
+entindex . 
+"money" ). Returns the value (type depends on field) . 
+138
+ • 
+plist.set(entindex, field, value) – Sets the player list field for player 
+entindex to 
+139
+ value . For example, you could set 
+"flashbang_time" to 0 to remove flash. 
+These functions interact with the on-screen player list (scoreboard) and allow reading/modifying it
+ programmatically.
+ Rendering (
+ renderer )
+ The 
+renderer module provides drawing functions for the 
+• 
+paint callbacks:
+ renderer.circle(x, y, r, g, b, a, radius, start_deg, pct) – Draws a filled circle
+ on screen at (x,y) with color RGBA 
+(r,g,b,a) . 
+radius in pixels, 
+starting angle, 
+pct (0–1) is fraction of circle (1.0 = full circle)
+ callback. 
+• 
+start_deg (0–360) is
+ 140
+ . Must be called from a 
+renderer.circle_outline(x, y, r, g, b, a, radius, start_deg, pct, 
+thickness) – Draws a circle outline (same parameters as above, plus 
+• 
+paint
+ thickness in px) . 
+renderer.gradient(x, y, w, h, r1, g1, b1, a1, r2, g2, b2, a2, horizontal) 
+Draws a filled gradient rectangle. 
+141
+ (x,y) is top-left, 
+(w,h) size. 
+(r1,g1,b1,a1) is one
+ corner color, 
+(r2,g2,b2,a2) the opposite corner. If 
+horizontal=true , gradient is
+ left→right; else top→bottom . 
+142
+ 8
+renderer.indicator(r, g, b, a, text…) – Draws text at the top-left indicator area
+ (usually white text after other indicators). Color RGBA first, then text strings (can be multiple).
+ Returns the Y position of drawn text, or nil on error . Use in paint callback. 
+renderer.line(x1, y1, x2, y2, r, g, b, a) – Draws a 1-pixel line between two screen
+ points . 
+renderer.rectangle(x, y, w, h, r, g, b, a) – Draws a filled rectangle at (x,y) of size
+ (w,h) in color RGBA . 
+renderer.text(x, y, r, g, b, a, flags, max_width, text…) – Draws text starting
+ at (x,y) in RGBA color. flags is a string for formatting ("+"=large, "-"=small, 
+"c"=center, "r"=right, "b"=bold, "d"=DPI, etc; see docs). max_width (number) will
+ wrap/clamp text (0 = no limit). The remaining arguments are strings to print (concatenated)
+ . Must be called in paint. 
+renderer.measure_text(flags, text…) – Measures the pixel size of given text with flags
+ (same flags as above). Returns width, height . Call only in paint. 
+renderer.load_jpg(bytes, width, height), renderer.load_png(bytes, width, 
+height) – Create a texture from raw JPG/PNG image data (bytes). Returns a texture ID
+ (number) . 
+renderer.load_rgba(bytes, width, height) – Create a texture from raw RGBA byte
+ string (hex). Returns texture ID . 
+renderer.load_svg(svg_content, width, height) – Create a texture by rasterizing SVG
+ content to the given size . Returns texture ID. 
+renderer.texture(id, x, y, w, h, r, g, b, a[, mode]) – Draws the loaded texture
+ with ID id at screen (x,y) with size (w,h) and color modulation RGBA. mode can be "f" (fill)
+ or "r" (repeat) or omitted. Must be called in paint . 
+renderer.triangle(x0, y0, x1, y1, x2, y2, r, g, b, a) – Draws a filled triangle
+ with 3 screen vertices and color . 
+renderer.world_to_screen(x, y, z) – Converts a world coordinate to screen (x,y).
+ Returns (sx, sy) or nil if point is off-screen . Use to place overlays at 3D positions (e.g.
+ player heads).
+ All drawing must occur during a paint event. These functions are documented in detail in the GSAPI
+ reference .
+ UI Creation (ui)
+ The ui module allows creating custom menu items and reading/writing them. Common functions:
+ ui.new_button(tab, container, name, callback) – Creates a button named name
+ under the given tab and container. callback is called (no args) when the button is
+ pressed. Returns a menu reference ID . 
+ui.new_checkbox(tab, container, name) – Creates a checkbox. Returns reference ID
+ (pass to ui.get/ui.set) . 
+ui.new_color_picker(tab, container, name[, r, g, b, a]) – Creates a color picker
+ with optional default RGBA. Returns reference ID . 
+ui.new_combobox(tab, container, name, option1, option2, ...) – Creates a drop
+down combobox with given string options. Returns reference ID . 
+ui.new_hotkey(tab, container, name[, inline, default_key]) – Creates a hotkey
+ toggle. Returns reference ID . 
+ui.new_label(tab, container, name) – Creates a text label (for spacing/grouping).
+ Returns reference ID . 
+• 
+143
+ • 
+144
+ • 
+145
+ • 
+146
+ 147
+ • 
+148
+ • 
+149 150
+ • 
+151
+ • 
+152
+ • 
+153
+ • 
+154
+ • 
+155
+ 140 153
+ • 
+156
+ • 
+157
+ • 
+158
+ • 
+159
+ • 
+160
+ • 
+161
+ 9
+• 
+• 
+• 
+• 
+• 
+• 
+ui.new_listbox(tab, container, name, itemsTable) – Creates a listbox with items
+ (table of strings). Returns reference ID . (Use 
+162
+ ui.get to retrieve the selected index.) 
+ui.new_multiselect(tab, container, name, option1, option2, ...) – Similar to
+ combobox, but allows selecting multiple items. Returns reference ID . 
+163
+ ui.new_slider(tab, container, name, min, max[, init, show_tooltip, unit, 
+scale, tooltips]) – Creates a slider between 
+min and 
+value), 
+show_tooltip , 
+max . Optional 
+unit (unit string, 0–2 chars), 
+init (default
+ scale , and 
+tooltips table. Returns
+ 164
+ 165
+ 166
+ reference ID . 
+ui.new_string(name[, default_value]) – Creates a hidden string value (no UI element)
+ that can store text. Returns reference ID . 
+ui.new_textbox(tab, container, name) – Creates a text input box. Returns reference ID
+ . 
+ui.reference(tab, container, name) – Gets the reference ID of an existing built-in menu
+ item (for reading or attaching to it). Use carefully; returns a reference or throws if not found . 
+Reading/Writing Values:- ui.get(ref) – Gets the current value of the UI element referenced by 
+167
+ ref (returned by
+ ui.new_* or 
+ui.reference ). Return type depends: checkbox→bool, slider→number,
+ combobox→string, multiselect→table of strings, colorpicker→r,g,b,a, hotkey→bool, etc. . Throws on
+ failure.- ui.set(ref,
+ value…) – Sets the UI element 
+168
+ ref to the given value(s). For checkboxes: 
+true/
+ false ; for sliders: number; combobox: string; multiselect: one or more strings; colorpicker: 
+r,g,b,a
+ 170
+ separately; button reference: callback invoked. The argument format follows standard UI syntax
+ .- ui.set_callback(ref,
+ func) – Sets a change callback for a custom UI element (
+ 169
+ ref from
+ ui.new_* ). 
+func is called whenever the element’s value changes, receiving 
+171
+ .- 
+ui.set_visible(ref, bool) – Shows/hides a UI element by reference .- 
+ui.update(ref, value…) – Alias of 
+(ref) as argument
+ 172
+ ui.set (used for readability; identical behavior) . 
+These functions allow fully custom menus. For example, to create a checkbox and read it: 
+local ref = ui.new_checkbox("AA", "Anti-Aim", "My Toggle")-- Later in script:
+ local enabled = ui.get(ref)-- true/false
+ 173
+ All UI functions and usage are documented in the reference .
+ 168
+ Vector Library
+ 169
+ GSAPI includes a 3D vector library. Load it with 
+require "vector" , then use:
+ • 
+• 
+vector(x, y, z) – Constructor: returns a new vector object with coordinates (x, y, z) . 
+vec:angles() – Returns Euler angles 
+174
+ {pitch, yaw, roll} corresponding to this forward
+ 175
+ • 
+• 
+176
+ vector . 
+vec:dist(other) – Returns the 3D distance to another vector
+ (math.sqrt(dx^2+dy^2+dz^2)) . 
+vec:dist2d(other) – Returns the 2D distance (X-Y plane) to another vector .
+ (Documentation mentions “cross product” in error; treat as 2D distance.) 
+177
+ 10
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+178
+ vec:dot(other) – Returns the dot (scalar) product of this vector with another . 
+vec:init(x, y, z) – Sets this vector’s components to (x, y, z). Returns itself . 
+vec:init_from_angles(pitch, yaw[, roll]) – Sets this vector to the forward direction
+ of given angles (pitch/yaw in degrees). Returns itself . 
+vec:length() – Returns the magnitude (length) of the vector . 
+vec:length2d() – Returns the 2D length (sqrt(x²+y²)) . 
+vec:lengthsqr() , 
+179
+ 180
+ 181
+ 182
+ vec:length2dsqr() – Returns squared length (avoids sqrt) for full and
+ 183
+ 184
+ 186
+ 2D length . 
+vec:normalize() – Normalizes the vector in place (makes it unit length) . 
+vec:normalized() – Returns a new unit vector in the same direction (original unchanged)
+ . 
+vec:lerp(to, t) – Linearly interpolates this vector towards 
+185
+ to by fraction 
+Returns a new vector on the line between them . 
+187
+ vec:scale(s) – Scales this vector by scalar 
+t (0–1).
+ s in place (multiplies components by s) . 
+vec:scaled(s) – Returns a new vector which is this vector multiplied by 
+s . 
+189
+ vec:to(other) – Returns the forward vector pointing from this vector to 
+188
+ other (normalized
+ difference)
+ 190
+ . (Equivalent to 
+(other - self):normalized() .) 
+vec:unpack() – Returns three numbers 
+x, y, z of the vector (same as accessing
+ .x, .y, .z ) . 
+191
+ vec:vectors() – For a forward vector, returns two orthogonal vectors 
+completing the basis . 
+192
+ {right, up}
+ Vectors behave like immutable values (methods returning new vectors when appropriate). Example
+ usage: 
+local a = vector(0,0,0)
+ local b = vector(10,0,0)
+ local dist = a:dist(b)-- 10
+ local forward = vector(0,0,0):init_from_angles(0,90)-- forward along +Y
+ All methods and behaviors are listed in the documentation .
+ 174
+ 193
+ Sources: The above details are derived from the official GameSensical GSAPI documentation .
+ Each function’s signature and behavior is cited from that documentation. 
+1
+ 153
+ 11
+Events | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/development/events
+ client | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/client
+ bit | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/bit
+ cvar | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/cvar
+ database | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/database
+ entity | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/entity
+ globals | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/globals
+ json | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/json
+ materialsystem | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/materialsystem
+ panorama | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/panorama
+ plist | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/plist
+ renderer | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/renderer
+ ui | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/ui
+ vector | gamesense-lua
+ https://gamesensical.gitbook.io/docs/developers/globals/vector
+ 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
+ 30 31 32 33 34
+ 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62
+ 63 64 65 66 67 68
+ 69 70 71 72 73 74 75 76 77 78
+ 79 80
+ 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98
+ 99 100 101 102 103 104 105 106 107 108 109 110 111
+ 112 113 114 115 116 117 118 119 120
+ 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135
+ 136 137
+ 138 139
+ 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155
+ 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173
+ 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193
+ 12
